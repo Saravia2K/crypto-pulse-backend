@@ -14,20 +14,21 @@ logger = logging.getLogger(__name__)
 
 
 def _build_limiter() -> Limiter:
+    # No default_limits: every endpoint that needs rate limiting declares its
+    # own @limiter.limit() decorator. Endpoints without a decorator (e.g.
+    # /health, /rate-limit/status) are intentionally exempt — applying
+    # default_limits would cause 500 errors on those routes when Redis is
+    # unavailable because the storage check fires even for undecorated routes.
     try:
-        lim = Limiter(
+        client = Limiter(
             key_func=get_remote_address,
             storage_uri=settings.redis_url,
-            default_limits=[f"{settings.rate_limit_requests}/minute"],
         )
         logger.info("Rate limiter: using Redis storage at %s", settings.redis_url)
-        return lim
+        return client
     except Exception as exc:
         logger.warning("Rate limiter: falling back to in-memory storage (%s)", exc)
-        return Limiter(
-            key_func=get_remote_address,
-            default_limits=[f"{settings.rate_limit_requests}/minute"],
-        )
+        return Limiter(key_func=get_remote_address)
 
 
 limiter = _build_limiter()

@@ -5,7 +5,7 @@ Neither endpoint applies rate limiting so they are safe for external monitors.
 import logging
 import time
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request
 
 from app.core.cache import cache
 from app.core.config import settings
@@ -17,7 +17,7 @@ router = APIRouter(tags=["ops"])
 
 
 @router.get("/health", response_model=HealthResponse, summary="Service health check")
-async def health_check(request: Request, response: Response) -> HealthResponse:
+async def health_check(request: Request) -> HealthResponse:
     """
     Verify the health of the API and its dependencies (Redis, CoinCap).
     No rate limiting is applied so monitoring tools can poll freely.
@@ -60,9 +60,14 @@ async def rate_limit_status(request: Request) -> RateLimitStatusResponse:
     reset_at: int | None = None
 
     if view_rate_limit:
-        _, remaining, reset_time = view_rate_limit
-        reset_at = int(reset_time)
-        remaining = max(remaining, 0)
+        try:
+            parts = tuple(view_rate_limit)
+            if len(parts) >= 3:
+                _, remaining, reset_time = parts[0], parts[1], parts[2]
+                reset_at = int(reset_time)
+                remaining = max(int(remaining), 0)
+        except (ValueError, TypeError):
+            pass
 
     return RateLimitStatusResponse(
         limit=settings.rate_limit_requests,
